@@ -1,0 +1,107 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+.env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# SchemaTeach Specific
+# Generated data files
+graph/*.jsonl
+nodes/
+*.npz
+*.html
+# Large data files
+*.pdf
+*.zip
+*.tar.gz
+*.rar
+PDFs/
+# Model caches
+.cache/
+transformers_cache/
+.huggingface/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# API keys and secrets
+.env.local
+.env.*.local
+config_local.yaml
+secrets.yaml
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.env.local
+frontend/.env.*.local
+
+# Large model files
+*.bin
+*.safetensors
+*.ckpt
+*.pth
+
+# Notes
+
+Richards.md
+DemoScript.md
+
+# Generated data files
+graph/
+nodes/
+*.npz
+*.html

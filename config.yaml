@@ -9,6 +9,12 @@ retrieval:
   expansion_hops: 1
   w_semantic: 1.0
   w_prereq: 0.2
+  global_chunk_top_k: 30
+  w_chunk: 0.7
+  w_lex: 0.2
+  w_concept: 0.6
+  graph_max_hops: 2
+  graph_path_top_k: 3
 
 paths:
   graph_dir: graph
@@ -17,4 +23,4 @@ paths:
 llm:
   provider: hf
   model: google/flan-t5-small
-  max_tokens: 256
+  max_tokens: 800

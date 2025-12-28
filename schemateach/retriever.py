@@ -54,3 +54,31 @@ def expand_nodes(kg: KnowledgeGraph, seeds: List[str], hops: int = 1) -> List[st
             break
     return list(seeds) + [n for n in seen if n not in seeds]
 
+
+def prereq_paths(kg: KnowledgeGraph, seeds: List[str], max_hops: int = 2, max_paths: int = 3) -> List[List[str]]:
+    paths: List[List[str]] = []
+    for seed in seeds:
+        queue: List[Tuple[str, List[str], int]] = [(seed, [seed], 0)]
+        while queue:
+            node_id, path, depth = queue.pop(0)
+            if depth >= max_hops:
+                continue
+            for neigh in kg.neighbors(node_id, edge_type="prereq"):
+                if neigh in path or neigh not in kg.nodes:
+                    continue
+                new_path = path + [neigh]
+                paths.append(new_path)
+                queue.append((neigh, new_path, depth + 1))
+    # Prefer longer paths first, then unique by end node
+    paths.sort(key=lambda p: (-len(p), p[0]))
+    deduped: List[List[str]] = []
+    seen_ends = set()
+    for path in paths:
+        end = path[-1]
+        if end in seen_ends:
+            continue
+        deduped.append(path)
+        seen_ends.add(end)
+        if len(deduped) >= max_paths:
+            break
+    return deduped

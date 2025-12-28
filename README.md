@@ -19,11 +19,15 @@ Hybrid retrieval architecture for studying mathematical proofs using PDFs as a k
    # Optional cleanup flags:
    #   --clear-graph   removes graph/graph.jsonl before ingest
    #   --clear-nodes   removes nodes/<pdf-id>/ before ingest
+   # Optional LLM-assisted section extraction when outlines/headings are missing:
+   #   --llm-section-extract --llm-section-model google/flan-t5-large
    ```
 4) Run a query (override LLM model at runtime if desired):
    ```
    python -m schemateach.main --query "What is the fundamental group?"
    python -m schemateach.main --query "What is the fundamental group?" --llm-model google/flan-t5-large
+   python -m schemateach.main --query "What is the fundamental group?" --llm-model openai:gpt-3.5-turbo
+   python -m schemateach.main --query "What is the fundamental group?" --llm-model openai:gpt-4o
    ```
    - Default config runs locally: `embedding.provider: hf` with `sentence-transformers/all-MiniLM-L6-v2`, and `llm.provider: hf` with `google/flan-t5-small`. Switch to OpenAI by editing `config.yaml` and setting `OPENAI_API_KEY`.
 5) Visualize the knowledge graph (requires `graph/graph.jsonl` from ingestion):
@@ -56,3 +60,22 @@ Hybrid retrieval architecture for studying mathematical proofs using PDFs as a k
 ### Evaluation Sketch
 - Build proof-related queries (definition, theorem restatement, missing step).
 - Compare baseline single-DB RAG vs graph+prereq expansion on answer quality, citation correctness, and hallucination rate.
+
+### Frontend (v0 Study Assistant)
+The UI lives in `frontend/` (Next.js). To run it locally:
+```
+cd frontend
+pnpm install
+pnpm dev
+```
+If you prefer npm or yarn, swap the package manager. This frontend is currently standalone; wire it to the backend by adding an API route or proxy once you decide on a serving layer (e.g., FastAPI/Flask).
+
+### Backend API (FastAPI)
+Run the backend server (serves `/query` for the frontend):
+```
+python -m uvicorn schemateach.server:app --host 127.0.0.1 --port 8000
+```
+The frontend proxies through `frontend/app/api/search/route.ts`. You can override the backend URL:
+```
+SCHEMATEACH_BACKEND_URL=http://127.0.0.1:8000 pnpm dev
+```

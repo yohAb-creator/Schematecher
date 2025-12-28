@@ -7,6 +7,11 @@ from typing import List, Tuple
 
 import numpy as np
 
+try:  # Optional FAISS acceleration.
+    import faiss  # type: ignore
+except Exception:  # pragma: no cover - environment-specific import
+    faiss = None
+
 
 @dataclass
 class Chunk:
@@ -21,6 +26,7 @@ class VectorStore:
         self.path = path
         self.embeddings: np.ndarray | None = None
         self.chunks: List[Chunk] = []
+        self._faiss_index = None
 
     def load(self) -> None:
         idx_path = self.path / "index.npz"
@@ -51,13 +57,37 @@ class VectorStore:
     def set_embeddings(self, embeddings: np.ndarray, chunks: List[Chunk]) -> None:
         self.embeddings = embeddings.astype(np.float32)
         self.chunks = chunks
+        self._faiss_index = None
 
     def search(self, query_vec: np.ndarray, top_k: int = 5) -> List[Tuple[float, Chunk]]:
         if self.embeddings is None or len(self.chunks) == 0:
             return []
+        index = self._get_faiss_index()
+        if index is not None:
+            qn = query_vec.astype(np.float32)
+            qn = qn / (np.linalg.norm(qn) + 1e-8)
+            scores, idxs = index.search(qn.reshape(1, -1), top_k)
+            hits: List[Tuple[float, Chunk]] = []
+            for score, idx in zip(scores[0], idxs[0]):
+                if idx < 0:
+                    continue
+                hits.append((float(score), self.chunks[int(idx)]))
+            return hits
         norms = np.linalg.norm(self.embeddings, axis=1) + 1e-8
         qn = query_vec / (np.linalg.norm(query_vec) + 1e-8)
         sims = (self.embeddings @ qn) / norms
         idxs = np.argsort(-sims)[:top_k]
         return [(float(sims[i]), self.chunks[int(i)]) for i in idxs]
 
+    def _get_faiss_index(self):
+        if faiss is None or self.embeddings is None or len(self.chunks) == 0:
+            return None
+        if self._faiss_index is not None:
+            return self._faiss_index
+        vectors = self.embeddings.astype(np.float32)
+        norms = np.linalg.norm(vectors, axis=1, keepdims=True) + 1e-8
+        vectors = vectors / norms
+        index = faiss.IndexFlatIP(vectors.shape[1])
+        index.add(vectors)
+        self._faiss_index = index
+        return index
