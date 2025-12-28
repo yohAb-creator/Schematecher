@@ -8,11 +8,11 @@ Hybrid retrieval architecture for studying mathematical proofs using PDFs as a k
 - Evaluate whether structured, prerequisite-aware retrieval improves proof understanding over baseline RAG/LLM.
 
 ### Quickstart
-1) Install deps (optionally skip `openai` if you only need the fallback deterministic embedder/LLM):
+1) Install deps (includes local HF models and visualization):
    ```
    pip install -r requirements.txt
    ```
-2) Configure models/paths in `config.yaml`.
+2) Configure models/paths in `config.yaml` (defaults: MiniLM embeddings, flan-t5-small LLM).
 3) Ingest a PDF into per-section indices + graph:
    ```
    python ingest_pdfs.py --pdf path/to/book.pdf --pdf-id book1
@@ -20,18 +20,16 @@ Hybrid retrieval architecture for studying mathematical proofs using PDFs as a k
    #   --clear-graph   removes graph/graph.jsonl before ingest
    #   --clear-nodes   removes nodes/<pdf-id>/ before ingest
    ```
-4) Run a query:
+4) Run a query (override LLM model at runtime if desired):
    ```
-   python -m schemateach.main --query "Outline the proof of the dominated convergence theorem."
-   # Override LLM model (e.g., flan-t5-large) at runtime:
+   python -m schemateach.main --query "What is the fundamental group?"
    python -m schemateach.main --query "What is the fundamental group?" --llm-model google/flan-t5-large
    ```
-   - Default config now runs locally: `embedding.provider: hf` with `all-MiniLM-L6-v2`, and `llm.provider: hf` with `flan-t5-small`. Switch to OpenAI by editing `config.yaml` and setting `OPENAI_API_KEY`.
+   - Default config runs locally: `embedding.provider: hf` with `sentence-transformers/all-MiniLM-L6-v2`, and `llm.provider: hf` with `google/flan-t5-small`. Switch to OpenAI by editing `config.yaml` and setting `OPENAI_API_KEY`.
 5) Visualize the knowledge graph (requires `graph/graph.jsonl` from ingestion):
    ```
    python -m schemateach.knowledge_graph_display --graph graph/graph.jsonl --out graph.png --node-size 1600
    ```
-   Omit `--out` to display an interactive window.
    For an interactive web view with zoom/pan/tooltips:
    ```
    python -m schemateach.knowledge_graph_web --graph graph/graph.jsonl --out graph.html --max-depth 3
@@ -40,63 +38,21 @@ Hybrid retrieval architecture for studying mathematical proofs using PDFs as a k
 
 ### High-Level Architecture
 - **Ingestion/Graph Builder**
-  - Parse PDFs into structured sections (title, number, text, math blocks, figures).
-  - Chunk within section (semantic or sentence-level) and embed with math-aware model (e.g., `text-embedding-3-large`, `bge-m3`, `nomic-embed-text`, or domain math model).
-  - Store per-section vectors in lightweight local DBs (e.g., Chroma/Qdrant/HNSWlib per node; naming `pdf_id/section_id.index`).
-  - Build graph metadata: nodes `{pdf_id, section_id, title, prerequisites, topics, embedding_stats}`; edges typed (`prereq`, `refers_to`, `same_topic`).
+  - Parse PDFs into structured sections (via PDF outlines/bookmarks when available; fallback to heading/page heuristics).
+  - Chunk within section (semantic or sentence-level) and embed with math-aware model (default MiniLM; can swap).
+  - Store per-section vectors in local stores; naming `nodes/<pdf>/<section>/`.
+  - Build graph metadata: nodes `{pdf_id, section_id, title, prerequisites, topics, centroid}`; edges typed (`prereq`, etc).
 - **Query Pipeline**
-  1) **Query analysis**: classify intent (definition, theorem proof, example) and extract key entities; embed query.
-  2) **Node routing**: score query vs section summaries/prereq topics to pick top-K nodes; optionally include ancestor prerequisites if query complexity high.
-  3) **Local retrieval**: run vector search inside chosen nodes; apply MMR and positional boosts (statements > examples when proving).
-  4) **Graph expansion**: if coverage low, expand along edges (prereq -> ancestors; refers_to -> cited lemmas) with tight budget.
-  5) **LLM synthesis**: craft answer grounded in retrieved chunks; include labeled citations `[(pdf, section, chunk_id)]`; include missing-context callouts.
-  6) **Feedback loop**: capture relevance judgments and proof-correctness checks to refine routing weights and chunking.
+  1) Query analysis/embedding.
+  2) Node routing (centroid similarity + prereq bonus).
+  3) Local retrieval inside nodes; dedupe chunks.
+  4) Graph expansion along prerequisites (configurable hops).
+  5) LLM synthesis with citations and truncation to fit model limits.
 - **Data + Config**
   - `graph/graph.jsonl`: node + edge metadata.
-  - `nodes/<pdf>/<section>/index/`: vector DB files.
-  - `nodes/<pdf>/<section>/manifest.json`: section summary, centroid embedding, topics, quality scores.
+  - `nodes/<pdf>/<section>/index.npz`, `chunks.jsonl`, `manifest.json`.
   - `config.yaml`: embedding model, chunking params, routing weights, expansion budgets.
 
-### Ingestion Pipeline (deterministic script)
-- `ingest_pdfs.py --pdf path --out graph/ --chunk-size 300 --overlap 60`
-  - Extract structure (PyMuPDF/pdfplumber + regex for headings).
-  - Detect math blocks (LaTeX, TeX delimiters, unicode math) and keep atomic.
-  - Generate section summary + topics with small LLM; store in manifest.
-  - Build per-section vector DB; write centroid embedding to graph node.
-  - Infer edges: 
-    - Prereq via heading numbers (e.g., 2.1 -> 2) + keyword heuristics (definition → theorem).
-    - Cited labels (`Lemma X`, `Theorem Y`); map to sections when possible.
-    - Topic similarity between section summaries to create `related` edges.
-
-### Query Routing Details
-- Node score = `w_sem * cosine(query_emb, node_centroid) + w_prereq * prereq_match + w_recent * recency`.
-- Always include explicit prerequisites for top nodes when intent involves proofs/derivations.
-- Stop routing expansion when marginal gain < threshold or budget hit (time or token).
-
-### Retrieval + Synthesis Prompts (sketch)
-- **Retriever**: `select top chunks maximizing relevance + diversity; prefer statements/lemmas if query asks for proof`.
-- **LLM prompt** template:
-  ```
-  You are a study assistant for math proofs. Use only the provided evidence.
-  Cite as [pdf:section:chunk]. If missing steps, state them explicitly before answering.
-  ```
-
-### Evaluation Plan
-- Build eval set of proof tasks: restate theorem, outline proof, fill missing step, explain prerequisite concept.
-- Compare:
-  - **Baseline**: vanilla RAG over whole corpus (single vector DB).
-  - **Hybrid**: graph + per-section nodes + prereq expansion.
-- Metrics: answer quality (expert/LLM grading), citation correctness, completeness, hallucination rate, time cost.
-
-### Implementation Roadmap
-1) Scaffold repo: `ingest_pdfs.py`, `router.py`, `retriever.py`, `synthesizer.py`, `config.yaml`, `graph/`.
-2) Implement ingestion with one PDF; emit graph manifests + per-section indices (Chroma/Qdrant local).
-3) Implement router using node centroids + prerequisites expansion.
-4) Implement retrieval + synthesis (LLM wrapper; streaming answer with citations).
-5) Add evaluations + CLI (`python main.py --query "..."`).
-6) Iterate chunking/edge heuristics and routing weights based on eval.
-
-### Next Steps
-- Confirm preferred embedding + vector DB (Chroma vs Qdrant) and LLM provider.
-- Provide a sample PDF to run ingestion and test end-to-end.
-- Decide on edge schema details (`prereq`, `refers_to`, `related`) and budgets for expansion.
+### Evaluation Sketch
+- Build proof-related queries (definition, theorem restatement, missing step).
+- Compare baseline single-DB RAG vs graph+prereq expansion on answer quality, citation correctness, and hallucination rate.

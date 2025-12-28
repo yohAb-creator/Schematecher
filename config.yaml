@@ -1,0 +1,20 @@
+embedding:
+  provider: hf
+  model: sentence-transformers/all-MiniLM-L6-v2
+  dimensions: 384
+
+retrieval:
+  node_top_k: 5
+  chunk_top_k: 6
+  expansion_hops: 1
+  w_semantic: 1.0
+  w_prereq: 0.2
+
+paths:
+  graph_dir: graph
+  nodes_dir: nodes
+
+llm:
+  provider: hf
+  model: google/flan-t5-small
+  max_tokens: 256
