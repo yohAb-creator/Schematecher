@@ -1,3 +1,5 @@
+<img width="819" height="497" alt="image" src="https://github.com/user-attachments/assets/c277e588-b28a-4421-aa4f-a54a94aac614" />
+
 ## SchemaTeach Study Assistant (Graph + Vector RAG)
 
 Hybrid retrieval architecture for studying mathematical proofs using PDFs as a knowledge graph of section-level vector databases.
